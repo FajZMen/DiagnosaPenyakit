@@ -47,62 +47,92 @@ def auth_page():
         else:
             st.error("ID Dokter tidak ditemukan.")
         
-def proses_diagnosa(gejala_pasien, dataset_gejala):
+
+def proses_diagnosa(gejala_pasien, gejala_fisik_pasien, faktor_pendukung_pasien, dataset_gejala):
     penyakit_kemungkinan = "Tidak Diketahui"
     persentase_kemungkinan = 0
+    resep_obat = []
 
     # Loop untuk mencocokkan gejala dengan dataset_gejala
     for penyakit, data in dataset_gejala.items():
         gejala_terkait = data["gejala"]
-        match_count = len(set(gejala_pasien) & set(gejala_terkait))
-        total_gejala = len(gejala_terkait)
-        persentase = (match_count / total_gejala) * 100
+        gejala_fisik_terkait = data.get("gejalaFisik", [])
+        faktor_pendukung_terkait = data.get("faktorPendukung", [])
 
+        # Memastikan hanya gejala yang ada dalam dataset yang dihitung
+        valid_gejala_pasien = [gejala for gejala in gejala_pasien if gejala in gejala_terkait]
+        valid_gejala_fisik_pasien = [gejala for gejala in gejala_fisik_pasien if gejala in gejala_fisik_terkait]
+        valid_faktor_pendukung_pasien = [faktor for faktor in faktor_pendukung_pasien if faktor in faktor_pendukung_terkait]
+
+        # Hitung kecocokan untuk gejala yang ada
+        match_count_gejala = len(valid_gejala_pasien)
+        match_count_fisik = len(valid_gejala_fisik_pasien)
+        match_count_faktor = len(valid_faktor_pendukung_pasien)
+
+        # Total gejala yang benar
+        total_gejala_benar = match_count_gejala + match_count_fisik + match_count_faktor
+
+        # Total inputan gejala pasien (baik yang benar maupun salah)
+        total_inputan_gejala = len(gejala_pasien) + len(gejala_fisik_pasien) + len(faktor_pendukung_pasien)
+
+        # Hitung persentase kecocokan
+        persentase = (total_gejala_benar / total_inputan_gejala) * 100
+
+        # Update kemungkinan penyakit jika persentase lebih tinggi
         if persentase > persentase_kemungkinan:
             penyakit_kemungkinan = penyakit
             persentase_kemungkinan = persentase
+            resep_obat = data.get("resepObat", [])
 
-    return penyakit_kemungkinan, persentase_kemungkinan
+
+    return penyakit_kemungkinan, persentase_kemungkinan, resep_obat
 
 def diagnosa_page():
-    if not st.session_state.get("is_logged_in", False):
-        st.warning("Silakan login terlebih dahulu.")
-        return
+    st.title("Halaman Diagnosa Pasien")
+    st.write("Silakan masukkan data pasien untuk melakukan diagnosa.")
 
-    st.title(f"Diagnosa Pasien")
-    nama_pasien = st.text_input("Masukkan Nama Pasien")
-    poli_dokter = st.session_state["dokter"]["poli"]
+    # Input data pasien
+    nama_pasien = st.text_input("Nama Pasien", "")
+    gejala = st.text_input("Gejala Pasien (dipisahkan dengan koma)", "")
+    gejala_fisik = st.text_input("Gejala Fisik Pasien (dipisahkan dengan koma)", "")
+    faktor_pendukung = st.text_input("Faktor Pendukung (dipisahkan dengan koma)", "")
 
-    # Menampilkan input gejala sebagai teks
-    gejala_input = st.text_area("Masukkan Gejala Pasien (dipisahkan dengan koma)", "")
+    # Tombol Diagnosa
+    if st.button("Proses Diagnosa"):
+        if nama_pasien and gejala:
+            # Proses data inputan
+            list_gejala = [g.strip() for g in gejala.split(",")]
+            list_gejala_fisik = [gf.strip() for gf in gejala_fisik.split(",")]
+            list_faktor_pendukung = [fp.strip() for fp in faktor_pendukung.split(",")]
 
-    if st.button("Diagnosa"):
-        if gejala_input:
-            # Mengubah input gejala yang dipisahkan koma menjadi list
-            gejala = [gejala.strip() for gejala in gejala_input.split(",")]
+            # Lakukan proses diagnosa
+            penyakit, persentase, saran_obat = proses_diagnosa(
+                list_gejala, list_gejala_fisik, list_faktor_pendukung, gejalaUmum
+            )
 
-            # Proses diagnosa berdasarkan poli yang dipilih
-            if poli_dokter == "Poli Umum":
-                penyakit, persentase = proses_diagnosa(gejala, gejalaUmum)
-            elif poli_dokter == "Poli Gigi":
-                penyakit, persentase = proses_diagnosa(gejala, gejalaGigi)
+            st.success(f"Hasil diagnosa telah disimpan ke History")
 
-            # Menampilkan hasil diagnosa
-            st.write(f"**Penyakit yang kemungkinan diderita:** {penyakit}")
-            st.write(f"**Persentase Kemungkinan:** {persentase:.2f}%")
-
-            # Simpan hasil diagnosa ke history konsultasi
+            # Simpan hasil diagnosa ke dalam history
             history_konsultasi.append({
                 "nama_pasien": nama_pasien,
-                "gejala": gejala,
+                "gejala": list_gejala,
+                "gejala_fisik": list_gejala_fisik,
+                "faktor_pendukung": list_faktor_pendukung,
                 "penyakit_kemungkinan": penyakit,
                 "persentase_kemungkinan": persentase,
-                "dokter": st.session_state["dokter"]["nama"],  # Nama dokter dari session
-                "poli": poli_dokter,
+                "saran_obat": ", ".join(saran_obat),
                 "tanggal_konsultasi": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
 
-            st.success(f"Hasil diagnosa telah disimpan ke History Konsultasi.")
+            # Tampilkan hasil diagnosa
+            st.subheader("Hasil Diagnosa")
+            st.write(f"**Nama Pasien**: {nama_pasien}")
+            st.write(f"**Gejala**: {', '.join(list_gejala)}")
+            st.write(f"**Gejala Fisik**: {', '.join(list_gejala_fisik)}")
+            st.write(f"**Faktor Pendukung**: {', '.join(list_faktor_pendukung)}")
+            st.write(f"**Penyakit Kemungkinan**: {penyakit}")
+            st.write(f"**Persentase Kemungkinan**: {persentase:.2f}%")
+            st.write(f"**Saran Obat**: {', '.join(saran_obat)}")
 
             lanjut = st.radio("Apakah ingin melanjutkan konsultasi untuk pasien berikutnya?", ("Pilih","Ya", "Tidak"))
 
@@ -112,9 +142,9 @@ def diagnosa_page():
                 st.success("Data konsultasi telah disimpan. Anda sekarang keluar dari proses konsultasi.")
             else:
                 st.error("Pilihan Tidak sesuai")
-                
+
         else:
-            st.error("Silakan masukkan gejala terlebih dahulu.")
+            st.error("Nama pasien dan gejala wajib diisi!")
 
 def downloadhistory():
     if history_konsultasi:
