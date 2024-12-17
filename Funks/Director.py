@@ -153,7 +153,7 @@ def downloadhistory():
         historyfile.seek(0)
 
         st.download_button(
-            label = "Download List Pesanan",
+            label = "Download History Konsultasi",
             data = historyfile.getvalue(),
             file_name = "HistoryKonsultasi.xlsx",
             mime = "application/vnd.ms-excel"
